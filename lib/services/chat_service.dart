@@ -6,16 +6,17 @@ class ChatService {
   Future<String> sendMessage(String message, ApiModel api) async {
     try {
       print('Sending message to API: $message using ${api.name}');
-      
+
       final encodedMessage = utf8.encode(message);
       final decodedMessage = utf8.decode(encodedMessage);
-      
+
       final Map<String, dynamic> requestBody = {
         'model': api.modelName,
         'messages': [
           {
             'role': 'system',
-            'content': '你是一個有幫助的AI助手。請以用戶使用的語言來回答問題。Follow the language style and type (Traditional/Simplified Chinese, English, etc.) that the user uses in their message.'
+            'content':
+                '你是一個有幫助的AI助手。請以用戶使用的語言來回答問題。Follow the language style and type (Traditional/Simplified Chinese, English, etc.) that the user uses in their message.'
           },
           {
             'role': 'user',
@@ -42,15 +43,15 @@ class ChatService {
       );
 
       print('Response status: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final responseBytes = response.bodyBytes;
         final responseString = utf8.decode(responseBytes);
         print('Decoded response: $responseString');
-        
+
         final data = jsonDecode(responseString);
-        if (data['choices'] != null && 
-            data['choices'].isNotEmpty && 
+        if (data['choices'] != null &&
+            data['choices'].isNotEmpty &&
             data['choices'][0]['message'] != null) {
           final content = data['choices'][0]['message']['content'];
           return utf8.decode(utf8.encode(content));
