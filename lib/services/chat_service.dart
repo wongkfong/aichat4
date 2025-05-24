@@ -1,20 +1,17 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../models/api_model.dart';
 
 class ChatService {
-  final String apiKey =
-      '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';
-  final String baseUrl = 'https://openrouter.ai/api/v1/chat/completions';
-
-  Future<String> sendMessage(String message) async {
+  Future<String> sendMessage(String message, ApiModel api) async {
     try {
-      print('Sending message to API: $message');
+      print('Sending message to API: $message using ${api.name}');
       
       final encodedMessage = utf8.encode(message);
       final decodedMessage = utf8.decode(encodedMessage);
       
       final Map<String, dynamic> requestBody = {
-        'model': 'deepseek/deepseek-chat-v3-0324:free',
+        'model': api.modelName,
         'messages': [
           {
             'role': 'system',
@@ -25,17 +22,18 @@ class ChatService {
             'content': decodedMessage,
           }
         ],
-        'temperature': 0.7,
+        'temperature': ApiConfig.temperature,
         'max_tokens': 1000,
       };
 
       print('Request body: ${jsonEncode(requestBody)}');
+      print('Using temperature: ${ApiConfig.temperature}');
 
       final response = await http.post(
-        Uri.parse(baseUrl),
+        Uri.parse(ApiConfig.baseUrl),
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          'Authorization': 'Bearer $apiKey',
+          'Authorization': 'Bearer ${ApiConfig.apiKey}',
           'HTTP-Referer': 'https://openrouter.ai/docs',
           'X-Title': 'Flutter AI ChatBox',
           'Accept': 'application/json; charset=utf-8',

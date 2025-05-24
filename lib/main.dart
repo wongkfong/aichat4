@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'services/chat_service.dart';
 import 'models/chat_room.dart';
 import 'services/chat_room_service.dart';
+import 'models/api_model.dart';
 
 void main() {
   runApp(const MyApp());
@@ -36,10 +38,18 @@ class ChatRoomList extends StatefulWidget {
 class _ChatRoomListState extends State<ChatRoomList> {
   final ChatRoomService _roomService = ChatRoomService();
   final TextEditingController _roomNameController = TextEditingController();
+  final TextEditingController _apiKeyController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _apiKeyController.text = ApiConfig.apiKey;
+  }
 
   @override
   void dispose() {
     _roomNameController.dispose();
+    _apiKeyController.dispose();
     super.dispose();
   }
 
@@ -106,6 +116,89 @@ class _ChatRoomListState extends State<ChatRoomList> {
     );
   }
 
+  void _showSettings() {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('設置'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('API Key'),
+              TextField(
+                controller: _apiKeyController,
+                decoration: const InputDecoration(
+                  hintText: '請輸入您的 OpenRouter API Key',
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 24),
+              const Text('溫度 (Temperature)'),
+              Row(
+                children: [
+                  Expanded(
+                    child: Slider(
+                      value: ApiConfig.temperature,
+                      min: 0.0,
+                      max: 2.0,
+                      divisions: 20,
+                      label: ApiConfig.temperature.toStringAsFixed(1),
+                      onChanged: (value) {
+                        setState(() {
+                          ApiConfig.updateTemperature(value);
+                        });
+                      },
+                    ),
+                  ),
+                  Text(
+                    ApiConfig.temperature.toStringAsFixed(1),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '溫度值越高，回應越具創意性；溫度值越低，回應越保守準確。',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (_apiKeyController.text.isNotEmpty) {
+                  ApiConfig.updateApiKey(_apiKeyController.text);
+                }
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('設置已更新')),
+                );
+              },
+              child: const Text('保存'),
+            ),
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: ApiConfig.apiKey));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('API Key 已複製到剪貼板')),
+                );
+              },
+              child: const Text('複製 API Key'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -113,6 +206,13 @@ class _ChatRoomListState extends State<ChatRoomList> {
         title: const Text('聊天室列表'),
         centerTitle: true,
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _showSettings,
+            tooltip: '設置',
+          ),
+        ],
       ),
       body: _roomService.rooms.isEmpty
           ? Center(
@@ -223,6 +323,9 @@ class _ChatScreenState extends State<ChatScreen> {
   void _handleSubmitted(String text) async {
     if (text.trim().isEmpty) return;
 
+    final room = widget.chatRoomService.getRoomById(widget.roomId);
+    if (room == null) return;
+
     final userMessage = ChatMessage(
       text: text,
       isUser: true,
@@ -236,7 +339,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.clear();
 
     try {
-      final response = await _chatService.sendMessage(text);
+      final response = await _chatService.sendMessage(text, room.selectedApi);
       final aiMessage = ChatMessage(
         text: response,
         isUser: false,
@@ -260,6 +363,44 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _showApiSelector() {
+    final room = widget.chatRoomService.getRoomById(widget.roomId);
+    if (room == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '選擇AI模型',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            ...ApiConfig.availableApis.map((api) => ListTile(
+              title: Text(api.name),
+              subtitle: Text(api.description),
+              leading: Radio<String>(
+                value: api.id,
+                groupValue: room.selectedApi.id,
+                onChanged: (value) {
+                  setState(() {
+                    room.selectedApi = ApiConfig.availableApis
+                        .firstWhere((a) => a.id == value);
+                  });
+                  Navigator.pop(context);
+                },
+              ),
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final room = widget.chatRoomService.getRoomById(widget.roomId);
@@ -276,8 +417,23 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.roomName),
-        centerTitle: true,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.roomName),
+            Text(
+              '使用: ${room.selectedApi.name}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.api),
+            onPressed: _showApiSelector,
+            tooltip: '選擇AI模型',
+          ),
+        ],
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
       ),
       body: Container(
